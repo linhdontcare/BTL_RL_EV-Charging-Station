@@ -27,6 +27,7 @@ CELL_SIZE = 39
 MAP_SIZE = GRID_SIZE * CELL_SIZE
 SIDEBAR_LEFT = MAP_LEFT + MAP_SIZE + 32
 FPS = 30
+MAX_STEPS = 100
 
 ROAD = 0
 OBSTACLE = 1
@@ -65,7 +66,8 @@ class Simulation:
     reward: int = 0
     collisions: int = 0
     status: str = "Đang tìm đường"
-    finished: bool = False
+    terminated: bool = False
+    truncated: bool = False
     busy_positions: set[tuple[int, int]] = field(default_factory=set)
     station_positions: tuple[tuple[int, int], ...] = field(default_factory=tuple)
 
@@ -156,7 +158,8 @@ class Simulation:
         self.reward = 0
         self.collisions = 0
         self.status = "Đang tìm đường"
-        self.finished = False
+        self.terminated = False
+        self.truncated = False
 
     def reload_stations(self) -> None:
         """Reload bản đồ trạm, luôn giữ lại ít nhất hai trụ đang trống."""
@@ -165,7 +168,7 @@ class Simulation:
 
     def move(self, dx: int, dy: int) -> None:
         """Di chuyển xe; va chạm giữ nguyên vị trí và phạt -100."""
-        if self.finished:
+        if self.terminated or self.truncated:
             return
 
         self.step += 1
@@ -177,16 +180,19 @@ class Simulation:
             self.reward -= 100
             self.collisions += 1
             self.status = "Va chạm - đường bị chặn"
-            return
+        else:
+            self.position = target
+            self.trail.append(target)
+            self.reward -= 5
+            self.status = f"Đang di chuyển ({target[1]}, {target[0]})"
 
-        self.position = target
-        self.trail.append(target)
-        self.reward -= 5
-        self.status = f"Đang di chuyển ({target[1]}, {target[0]})"
+        if self.step >= MAX_STEPS and not self.terminated:
+            self.truncated = True
+            self.status = "Hết số bước tối đa"
 
     def charge(self) -> None:
         """Sạc tại vị trí hiện tại và kết thúc lượt mô phỏng."""
-        if self.finished:
+        if self.terminated or self.truncated:
             return
 
         self.step += 1
@@ -203,7 +209,7 @@ class Simulation:
         else:
             self.reward -= 50
             self.status = "Charge sai vị trí (-50)"
-        self.finished = True
+        self.terminated = True
 
 
 class PygameRenderer:
@@ -353,7 +359,7 @@ class PygameRenderer:
         self.text("THÔNG SỐ MÔ PHỎNG", (SIDEBAR_LEFT + 20, y), self.bold_font)
         y += 34
         values = (
-            ("Step", simulation.step),
+            ("Step", f"{simulation.step}/{MAX_STEPS}"),
             ("Reward", simulation.reward),
             ("Collisions", simulation.collisions),
         )
