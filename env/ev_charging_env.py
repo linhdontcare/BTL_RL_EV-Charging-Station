@@ -161,6 +161,7 @@ class EVChargingEnv(gym.Env):
             "is_success": self.is_success,
             "charged_type": self.charged_type,
             "scenario_id": self.current_scenario_id,
+            "status": self.status,
         }
 
     def reset(
